@@ -8,9 +8,19 @@ if(!isset($_SESSION['usuario_codigo'])) {
     exit();
 }
 
-// Consulta vulnerable para obtener formularios
+// --- VULNERABILIDAD: Consulta potencialmente insegura ---
+// Aunque aquí solo selecciona formularios activos, si se modificara para
+// usar entrada del usuario sin cuidado, podría ser vulnerable.
+// Por ahora, la vulnerabilidad principal aquí es el XSS.
 $query_formularios = "SELECT * FROM formularios WHERE activo = 1";
 $formularios = mysqli_query($conexion, $query_formularios);
+
+// Verificar si la consulta fue exitosa
+if (!$formularios) {
+    // Manejo básico de errores (no mostrar mysqli_error en producción)
+    die("Error al consultar formularios: " . mysqli_error($conexion));
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -26,7 +36,10 @@ $formularios = mysqli_query($conexion, $query_formularios);
         <div class="container mx-auto flex justify-between items-center">
             <h1 class="text-xl font-bold">VirtualPhysics</h1>
             <div class="flex items-center space-x-4">
-                <!-- XSS Vulnerable - sin escapar -->
+                <!-- --- VULNERABILIDAD: Stored XSS --- -->
+                <!-- El nombre de usuario se obtiene de la sesión y se muestra directamente. -->
+                <!-- Si el nombre en la BD (insertado quizás por otra vulnerabilidad o manualmente) -->
+                <!-- contiene <script>...</script>, se ejecutará aquí. -->
                 <span>Bienvenido, <?php echo $_SESSION['usuario_nombre']; ?></span>
                 <a href="logout.php" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded">Salir</a>
             </div>
@@ -41,50 +54,45 @@ $formularios = mysqli_query($conexion, $query_formularios);
                 <?php while($formulario = mysqli_fetch_assoc($formularios)): ?>
                     <div class="border rounded-lg p-4 hover:shadow-lg transition-shadow">
                         <h3 class="text-lg font-semibold text-blue-600 mb-2">
+                            <!-- --- VULNERABILIDAD: Stored XSS --- -->
+                            <!-- El título del formulario se muestra directamente desde la BD. -->
                             <?php echo $formulario['titulo']; ?>
                         </h3>
                         <p class="text-gray-600 mb-4">
+                            <!-- --- VULNERABILIDAD: Stored XSS --- -->
+                            <!-- La descripción del formulario se muestra directamente desde la BD. -->
                             <?php echo $formulario['descripcion']; ?>
                         </p>
+                        <!-- El ID se usa en la URL, lo que podría ser un vector si no se valida en formularios.php -->
                         <a href="formularios.php?id=<?php echo $formulario['id']; ?>" 
                            class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded inline-block">
                             Comenzar Cuestionario
                         </a>
                     </div>
                 <?php endwhile; ?>
+                 <?php 
+                 // Liberar resultado si es necesario
+                 if ($formularios) { mysqli_free_result($formularios); } 
+                 ?>
             </div>
         </div>
         
-        <!-- Información de temas -->
+        <!-- Información de temas (contenido estático, sin vulnerabilidad directa aquí) -->
         <div class="bg-white rounded-lg shadow-md p-6 mt-6">
             <h3 class="text-xl font-bold mb-4 text-gray-800">Temas de Física Cubiertos</h3>
             <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div class="bg-blue-50 p-3 rounded">
-                    <h4 class="font-semibold text-blue-600">MRU</h4>
-                    <p class="text-sm text-gray-600">Movimiento Rectilíneo Uniforme</p>
-                </div>
-                <div class="bg-green-50 p-3 rounded">
-                    <h4 class="font-semibold text-green-600">MRUA</h4>
-                    <p class="text-sm text-gray-600">Movimiento Uniformemente Acelerado</p>
-                </div>
-                <div class="bg-purple-50 p-3 rounded">
-                    <h4 class="font-semibold text-purple-600">Caída Libre</h4>
-                    <p class="text-sm text-gray-600">Movimiento bajo gravedad</p>
-                </div>
-                <div class="bg-red-50 p-3 rounded">
-                    <h4 class="font-semibold text-red-600">Tiro Vertical</h4>
-                    <p class="text-sm text-gray-600">Lanzamiento hacia arriba</p>
-                </div>
-                <div class="bg-yellow-50 p-3 rounded">
-                    <h4 class="font-semibold text-yellow-600">Tiro Parabólico</h4>
-                    <p class="text-sm text-gray-600">Movimiento de proyectiles</p>
-                </div>
-                <div class="bg-indigo-50 p-3 rounded">
-                    <h4 class="font-semibold text-indigo-600">Movimiento Circular</h4>
-                    <p class="text-sm text-gray-600">Circular Uniforme</p>
-                </div>
+                <div class="bg-blue-50 p-3 rounded"><h4 class="font-semibold text-blue-600">MRU</h4><p class="text-sm text-gray-600">Movimiento Rectilíneo Uniforme</p></div>
+                <div class="bg-green-50 p-3 rounded"><h4 class="font-semibold text-green-600">MRUA</h4><p class="text-sm text-gray-600">Movimiento Uniformemente Acelerado</p></div>
+                <div class="bg-purple-50 p-3 rounded"><h4 class="font-semibold text-purple-600">Caída Libre</h4><p class="text-sm text-gray-600">Movimiento bajo gravedad</p></div>
+                <div class="bg-red-50 p-3 rounded"><h4 class="font-semibold text-red-600">Tiro Vertical</h4><p class="text-sm text-gray-600">Lanzamiento hacia arriba</p></div>
+                <div class="bg-yellow-50 p-3 rounded"><h4 class="font-semibold text-yellow-600">Tiro Parabólico</h4><p class="text-sm text-gray-600">Movimiento de proyectiles</p></div>
+                <div class="bg-indigo-50 p-3 rounded"><h4 class="font-semibold text-indigo-600">Movimiento Circular</h4><p class="text-sm text-gray-600">Circular Uniforme</p></div>
             </div>
         </div>
     </div>
 </body>
 </html>
+<?php
+// Cerrar conexión
+mysqli_close($conexion);
+?>

@@ -1,52 +1,70 @@
 <?php
 session_start();
-// Sin validación de sesión existente
+
+// Redirigir si ya está logueado
+if(isset($_SESSION["usuario_codigo"])) {
+    header("Location: dashboard.php");
+    exit();
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VirtualPhysics - Login</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>VirtualPhysics - Inicio de Sesión</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
-<body class="bg-blue-50 min-h-screen flex items-center justify-center">
-    <div class="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-        <div class="text-center mb-8">
-            <h1 class="text-3xl font-bold text-blue-600">VirtualPhysics</h1>
-            <p class="text-gray-600">Sistema de Cuestionarios de Física</p>
-        </div>
-        
-        <!-- Mostrar errores sin filtrar (XSS vulnerable) -->
-        <?php if(isset($_GET['error'])): ?>
-            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                Error: <?php echo $_GET['error']; ?>
-            </div>
-        <?php endif; ?>
-        
-        <form action="procesar_login.php" method="POST" class="space-y-6">
-            <div>
-                <label for="correo" class="block text-sm font-medium text-gray-700">Correo Electrónico</label>
-                <input type="email" id="correo" name="correo" required 
-                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+<body>
+    <div class="container">
+        <div class="login-card">
+            <!-- Lado izquierdo - Imagen -->
+            <div class="image-section">
+                <div class="character-container">
+                    <img src="img/fondo.png" alt="Estudiante VirtualPhysics" class="character-image">
+                </div>
             </div>
             
-            <div>
-                <label for="contrasena" class="block text-sm font-medium text-gray-700">Contraseña</label>
-                <input type="password" id="contrasena" name="contrasena" required 
-                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+            <!-- Lado derecho - Formulario -->
+            <div class="form-section">
+                <!-- Logo y encabezado -->
+                <div class="header">
+                    <div class="logo-container">
+                        <img src="img/logo.png" alt="VirtualPhysics Logo" class="logo">
+                    </div>
+                    <p class="welcome-text">Bienvenido a VirtualPhysics</p>
+                    <h1 class="page-title">Inicio de Sesión</h1>
+                </div>
+
+                <!-- Formulario -->
+                <form action="procesar_login.php" method="POST" class="login-form">
+                    <div class="form-group">
+                        <label for="correo">Correo</label>
+                        <input type="text" id="correo" name="correo" required 
+                               placeholder="login@gmail.com">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="contrasena">Contraseña</label>
+                        <input type="password" id="contrasena" name="contrasena" required 
+                               placeholder="••••••••••••">
+                    </div>
+                    
+                    <button type="submit" class="login-btn">
+                        <span>INGRESAR</span>
+                        <svg class="btn-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M5 12h14M12 5l7 7-7 7"/>
+                        </svg>
+                    </button>
+                </form>
+
+                <!-- Footer links -->
+                <div class="footer-links">
+                    <a href="#" class="link">¿No tienes una cuenta?</a>
+                    <a href="#" class="link-primary">Regístrate</a>
+                </div>
             </div>
-            
-            <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                Iniciar Sesión
-            </button>
-        </form>
-        
-        <div class="mt-6 text-center">
-            <p class="text-sm text-gray-600">
-                Usuario de prueba: <strong>izi@gmail.com</strong><br>
-                Contraseña: <strong>123456</strong>
-            </p>
         </div>
     </div>
 </body>

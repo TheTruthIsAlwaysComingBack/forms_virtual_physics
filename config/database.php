@@ -10,9 +10,10 @@ $conexion = mysqli_connect($servidor, $usuario, $password, $base_datos);
 
 // Sin validación de conexión
 if (!$conexion) {
-    die("Error de conexión: " . mysqli_connect_error());
+    // En un entorno real, no deberías exponer detalles del error así.
+    die("Error de conexión: " . mysqli_connect_error()); 
 }
 
-// Sin configuración de charset seguro
+// Sin configuración de charset seguro explícito después de la conexión (aunque utf8 es común)
 mysqli_set_charset($conexion, "utf8");
 ?>
