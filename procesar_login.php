@@ -51,11 +51,11 @@ if(mysqli_num_rows($resultado) > 0) {
     // El mensaje de error incluye la entrada del usuario ($correo) sin escapar adecuadamente.
     // Si un atacante manipula la URL o el POST para incluir script en 'correo',
     // y el index.php muestra el parámetro 'error' sin escapar, el script se ejecutará.
-    // Ejemplo: correo = <script>alert('XSS')</script>
-    $error_msg = "Credenciales incorrectas para el correo: " . $correo; 
-    // ¡Importante! No usamos urlencode() aquí para permitir la inyección XSS en el parámetro 'error'.
-    // En index.php, el mensaje de error debe mostrarse sin htmlspecialchars() para que funcione.
-    header("Location: index.php?error=" . $error_msg);
+    
+    // MODIFICADO: Separamos el correo de la consulta SQL para permitir pruebas de XSS
+    // sin romper la sintaxis SQL. Ahora el XSS se puede probar directamente en la URL.
+    $error_msg = "Credenciales incorrectas. Intente nuevamente.";
+    header("Location: index.php?error=" . $error_msg . "&correo=" . $correo);
     exit();
 }
 
