@@ -10,17 +10,14 @@ $correo = $_POST['correo'];
 $contrasena = $_POST['contrasena'];
 
 // --- VULNERABILIDAD: SQL Injection ---
-// La consulta concatena directamente las variables $correo y $contrasena.
-// Un atacante puede inyectar código SQL malicioso.
-// Ejemplo de explotación en correo: admin@example.com' OR '1'='1' -- 
-// Ejemplo de explotación en contraseña: ' OR '1'='1' -- 
-// Nota: La base de datos usa SHA2 para la contraseña, lo que dificulta la inyección directa 
-// en la contraseña para bypass simple, pero la vulnerabilidad en el correo sigue presente 
-// y otras técnicas de SQLi (ej. basadas en errores, unión) podrían ser posibles.
-// Para fines demostrativos, simplificaremos asumiendo que un atacante podría encontrar una forma
-// o que la función SHA2 no se aplicara correctamente en todos los casos.
-// Mantenemos la estructura vulnerable como se solicitó.
-$query = "SELECT * FROM usuarios WHERE correo = '$correo' AND contrasena = SHA2('$contrasena', 256)";
+// La consulta concatena directamente la variable $correo sin saneamiento.
+// Un atacante puede inyectar código SQL malicioso en el campo correo.
+// Ejemplo de explotación en correo: ' OR 1=1) -- 
+// Esto hará que la condición WHERE sea siempre verdadera y se saltará la validación de contraseña.
+
+// IMPORTANTE: Reorganizamos la consulta con paréntesis para facilitar la inyección SQL
+// Esta estructura permite que la inyección en el campo correo funcione sin romper la sintaxis de SHA2
+$query = "SELECT * FROM usuarios WHERE (correo = '$correo') AND (contrasena = SHA2('$contrasena', 256))";
 
 // --- VULNERABILIDAD: Sin protección contra fuerza bruta ---
 // No hay límite de intentos de login.
@@ -31,9 +28,7 @@ $resultado = mysqli_query($conexion, $query);
 // Podría revelar información si mysqli_query falla y se muestran errores.
 if (!$resultado) {
     // En un entorno real, loguear el error, no mostrarlo directamente.
-    // header("Location: index.php?error=Error en la consulta: " . mysqli_error($conexion));
-    // Para la demo, simplemente redirigimos a un error genérico
-    header("Location: index.php?error=Error interno del servidor.");
+    header("Location: index.php?error=Error en la consulta: " . mysqli_error($conexion));
     exit();
 }
 
