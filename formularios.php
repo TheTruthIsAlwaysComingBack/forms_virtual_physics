@@ -35,6 +35,7 @@ if (!$preguntas) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $formulario ? $formulario['titulo'] : 'Formulario no encontrado'; ?> - VirtualPhysics</title>
+    <link rel="icon" type="image/png" href="img/logo.png">
     <link rel="stylesheet" href="css/formularios.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
